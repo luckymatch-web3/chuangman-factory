@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Sparkles, Loader2, Download, RefreshCw, Settings2, ChevronDown } from "lucide-react";
 
 const models = [
-  { id: "nanobanner", name: "NanoBanner", desc: "极速出图·2积分", speed: "~2秒" },
-  { id: "midjourney", name: "Midjourney", desc: "精品画质·5积分", speed: "~30秒" },
+  { id: "seedream", name: "即梦 Seedream", desc: "火山引擎 · 高品质动漫", credits: 3, speed: "~5秒" },
+  { id: "kling_img", name: "可灵", desc: "快手 · 极速出图", credits: 2, speed: "~3秒" },
 ];
 
 const styles = [
@@ -22,7 +22,7 @@ const ratios = [
 ];
 
 export default function ImageGenerationPage() {
-  const [model, setModel] = useState("nanobanner");
+  const [model, setModel] = useState("seedream");
   const [prompt, setPrompt] = useState("");
   const [negPrompt, setNegPrompt] = useState("");
   const [style, setStyle] = useState("日漫风");
@@ -32,6 +32,8 @@ export default function ImageGenerationPage() {
   const [results, setResults] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const currentModel = models.find((m) => m.id === model)!;
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setLoading(true);
@@ -39,20 +41,10 @@ export default function ImageGenerationPage() {
       const res = await fetch("/api/generate/image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          prompt,
-          negative_prompt: negPrompt,
-          style,
-          ratio,
-          batch_size: batchSize,
-        }),
+        body: JSON.stringify({ model, prompt, negative_prompt: negPrompt, style, ratio, batch_size: batchSize }),
       });
       const data = await res.json();
-      if (data.task_id) {
-        // Poll for result
-        pollTask(data.task_id);
-      }
+      if (data.task_id) pollTask(data.task_id);
     } catch {
       setLoading(false);
     }
@@ -80,14 +72,14 @@ export default function ImageGenerationPage() {
 
   return (
     <div className="flex gap-6 h-[calc(100vh-7rem)]">
-      {/* Left panel - Config */}
+      {/* Left panel */}
       <div className="w-80 flex-shrink-0 flex flex-col gap-5 overflow-y-auto pr-2">
         <div>
           <h1 className="text-xl font-bold text-white">图片生成</h1>
           <p className="text-sm text-gray-400 mt-1">使用AI模型生成高质量动漫图片</p>
         </div>
 
-        {/* Model selection */}
+        {/* Model */}
         <div>
           <label className="text-sm font-medium text-gray-300 mb-2 block">选择模型</label>
           <div className="grid grid-cols-2 gap-2">
@@ -129,9 +121,7 @@ export default function ImageGenerationPage() {
                 key={s}
                 onClick={() => setStyle(s)}
                 className={`rounded-full px-3 py-1.5 text-xs transition-all ${
-                  style === s
-                    ? "bg-[#00f5d4] text-black font-semibold"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  style === s ? "bg-[#00f5d4] text-black font-semibold" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
                 {s}
@@ -149,9 +139,7 @@ export default function ImageGenerationPage() {
                 key={r.label}
                 onClick={() => setRatio(r.label)}
                 className={`rounded-lg px-3 py-2 text-xs transition-all ${
-                  ratio === r.label
-                    ? "bg-[#00f5d4] text-black font-semibold"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  ratio === r.label ? "bg-[#00f5d4] text-black font-semibold" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
                 {r.label}
@@ -160,7 +148,7 @@ export default function ImageGenerationPage() {
           </div>
         </div>
 
-        {/* Batch size */}
+        {/* Batch */}
         <div>
           <label className="text-sm font-medium text-gray-300 mb-2 block">生成数量</label>
           <div className="flex gap-2">
@@ -169,9 +157,7 @@ export default function ImageGenerationPage() {
                 key={n}
                 onClick={() => setBatchSize(n)}
                 className={`rounded-lg px-4 py-2 text-sm transition-all ${
-                  batchSize === n
-                    ? "bg-[#00f5d4] text-black font-semibold"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  batchSize === n ? "bg-[#00f5d4] text-black font-semibold" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
                 {n}张
@@ -185,8 +171,7 @@ export default function ImageGenerationPage() {
           onClick={() => setShowAdvanced(!showAdvanced)}
           className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-300 transition-colors"
         >
-          <Settings2 className="h-4 w-4" />
-          高级设置
+          <Settings2 className="h-4 w-4" />高级设置
           <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
         </button>
         {showAdvanced && (
@@ -201,40 +186,29 @@ export default function ImageGenerationPage() {
           </div>
         )}
 
-        {/* Generate button */}
         <button
           onClick={handleGenerate}
           disabled={loading || !prompt.trim()}
           className="w-full rounded-lg bg-[#00f5d4] py-3 font-semibold text-black hover:shadow-[0_0_20px_rgba(0,245,212,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              生成中...
-            </>
+            <><Loader2 className="h-5 w-5 animate-spin" />生成中...</>
           ) : (
-            <>
-              <Sparkles className="h-5 w-5" />
-              生成图片 ({model === "nanobanner" ? 2 * batchSize : 5 * batchSize} 积分)
-            </>
+            <><Sparkles className="h-5 w-5" />生成图片 ({currentModel.credits * batchSize} 积分)</>
           )}
         </button>
       </div>
 
-      {/* Right panel - Results */}
+      {/* Right panel */}
       <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.02] p-6 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-white">生成结果</h2>
           {results.length > 0 && (
-            <button
-              onClick={() => setResults([])}
-              className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1"
-            >
+            <button onClick={() => setResults([])} className="text-sm text-gray-400 hover:text-gray-300 flex items-center gap-1">
               <RefreshCw className="h-3 w-3" /> 清空
             </button>
           )}
         </div>
-
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[60vh] text-center">
             <div className="h-24 w-24 rounded-full bg-white/5 flex items-center justify-center mb-4">
@@ -248,7 +222,7 @@ export default function ImageGenerationPage() {
             {results.map((url, i) => (
               <div key={i} className="group relative rounded-lg overflow-hidden border border-white/10 bg-black aspect-square">
                 <img src={url} alt={`生成结果 ${i + 1}`} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button className="rounded-full bg-white/20 p-2 hover:bg-white/30 transition-colors">
                     <Download className="h-5 w-5 text-white" />
                   </button>

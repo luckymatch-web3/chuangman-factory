@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, Download, RefreshCw, Upload, ImageIcon, Video } from "lucide-react";
+import { Loader2, Download, RefreshCw, Upload, Video } from "lucide-react";
+
+const models = [
+  { id: "kling", name: "可灵 Kling 1.6", desc: "快手 · 高质量视频生成", credits: 10 },
+  { id: "sora2", name: "Sora 2", desc: "OpenAI · 创意视频生成", credits: 20 },
+];
 
 const durations = [
   { label: "5秒", value: 5 },
@@ -13,12 +18,15 @@ const motionStyles = [
 ];
 
 export default function VideoGenerationPage() {
+  const [model, setModel] = useState("kling");
   const [prompt, setPrompt] = useState("");
   const [sourceImage, setSourceImage] = useState<string | null>(null);
   const [duration, setDuration] = useState(5);
   const [motion, setMotion] = useState("自然运动");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<string[]>([]);
+
+  const currentModel = models.find((m) => m.id === model)!;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,17 +44,10 @@ export default function VideoGenerationPage() {
       const res = await fetch("/api/generate/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          source_image: sourceImage,
-          duration,
-          motion_style: motion,
-        }),
+        body: JSON.stringify({ model, prompt, source_image: sourceImage, duration, motion_style: motion }),
       });
       const data = await res.json();
-      if (data.task_id) {
-        pollTask(data.task_id);
-      }
+      if (data.task_id) pollTask(data.task_id);
     } catch {
       setLoading(false);
     }
@@ -78,7 +79,29 @@ export default function VideoGenerationPage() {
       <div className="w-80 flex-shrink-0 flex flex-col gap-5 overflow-y-auto pr-2">
         <div>
           <h1 className="text-xl font-bold text-white">视频生成</h1>
-          <p className="text-sm text-gray-400 mt-1">Sora 2 模型 · 20积分/条</p>
+          <p className="text-sm text-gray-400 mt-1">AI模型生成高质量动漫视频</p>
+        </div>
+
+        {/* Model */}
+        <div>
+          <label className="text-sm font-medium text-gray-300 mb-2 block">选择模型</label>
+          <div className="grid grid-cols-2 gap-2">
+            {models.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setModel(m.id)}
+                className={`rounded-lg border p-3 text-left transition-all ${
+                  model === m.id
+                    ? "border-[#00f5d4] bg-[#00f5d4]/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                }`}
+              >
+                <div className="font-semibold text-white text-sm">{m.name}</div>
+                <div className="text-xs text-gray-400 mt-0.5">{m.desc}</div>
+                <div className="text-xs text-[#00f5d4] mt-1">{m.credits} 积分/条</div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Source image */}
@@ -94,9 +117,7 @@ export default function VideoGenerationPage() {
                 <button
                   onClick={(e) => { e.stopPropagation(); setSourceImage(null); }}
                   className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center"
-                >
-                  ×
-                </button>
+                >×</button>
               </div>
             ) : (
               <>
@@ -129,9 +150,7 @@ export default function VideoGenerationPage() {
                 key={d.value}
                 onClick={() => setDuration(d.value)}
                 className={`rounded-lg px-4 py-2 text-sm transition-all ${
-                  duration === d.value
-                    ? "bg-[#00f5d4] text-black font-semibold"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  duration === d.value ? "bg-[#00f5d4] text-black font-semibold" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
                 {d.label}
@@ -140,7 +159,7 @@ export default function VideoGenerationPage() {
           </div>
         </div>
 
-        {/* Motion style */}
+        {/* Motion */}
         <div>
           <label className="text-sm font-medium text-gray-300 mb-2 block">运动方式</label>
           <div className="flex flex-wrap gap-2">
@@ -149,9 +168,7 @@ export default function VideoGenerationPage() {
                 key={m}
                 onClick={() => setMotion(m)}
                 className={`rounded-full px-3 py-1.5 text-xs transition-all ${
-                  motion === m
-                    ? "bg-[#00f5d4] text-black font-semibold"
-                    : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  motion === m ? "bg-[#00f5d4] text-black font-semibold" : "bg-white/5 text-gray-400 hover:bg-white/10"
                 }`}
               >
                 {m}
@@ -160,22 +177,15 @@ export default function VideoGenerationPage() {
           </div>
         </div>
 
-        {/* Generate */}
         <button
           onClick={handleGenerate}
           disabled={loading || !prompt.trim()}
           className="w-full rounded-lg bg-[#00f5d4] py-3 font-semibold text-black hover:shadow-[0_0_20px_rgba(0,245,212,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              生成中...
-            </>
+            <><Loader2 className="h-5 w-5 animate-spin" />生成中...</>
           ) : (
-            <>
-              <Video className="h-5 w-5" />
-              生成视频 (20 积分)
-            </>
+            <><Video className="h-5 w-5" />生成视频 ({currentModel.credits} 积分)</>
           )}
         </button>
       </div>
@@ -190,7 +200,6 @@ export default function VideoGenerationPage() {
             </button>
           )}
         </div>
-
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[60vh] text-center">
             <div className="h-24 w-24 rounded-full bg-white/5 flex items-center justify-center mb-4">
