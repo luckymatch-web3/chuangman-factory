@@ -21,10 +21,22 @@ const inputModes = [
   { id: "write" as InputMode, label: "在线创作", icon: PenLine, desc: "直接在这里写故事" },
 ];
 
+const imageModels = [
+  { id: "seedream", name: "即梦 Seedream", desc: "火山引擎 · 国产最强" },
+  { id: "midjourney", name: "Midjourney", desc: "Niji 6 · 动漫专精" },
+];
+
+const videoModels = [
+  { id: "kling", name: "可灵 Kling 1.6", desc: "快手 · 精品画质" },
+  { id: "sora2", name: "Sora 2", desc: "OpenAI · 创意视频" },
+];
+
 export default function PipelinePage() {
   const [mode, setMode] = useState<InputMode>("write");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
+  const [imageModel, setImageModel] = useState("seedream");
+  const [videoModel, setVideoModel] = useState("kling");
   const [running, setRunning] = useState(false);
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [steps, setSteps] = useState<PipelineStep[]>([]);
@@ -74,7 +86,7 @@ export default function PipelinePage() {
       const res = await fetch("/api/pipeline/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, input_type: mode }),
+        body: JSON.stringify({ text, input_type: mode, image_model: imageModel, video_model: videoModel }),
       });
       const data = await res.json();
 
@@ -198,6 +210,50 @@ export default function PipelinePage() {
                 )}
               </div>
             )}
+
+            {/* Model Selection */}
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-gray-400 mb-2 block">图片模型</label>
+                <div className="space-y-2">
+                  {imageModels.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setImageModel(m.id)}
+                      disabled={running}
+                      className={`w-full rounded-lg border p-2.5 text-left transition-all text-sm disabled:opacity-50 ${
+                        imageModel === m.id
+                          ? "border-[#00f5d4] bg-[#00f5d4]/5"
+                          : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                      }`}
+                    >
+                      <div className={`font-medium ${imageModel === m.id ? "text-white" : "text-gray-300"}`}>{m.name}</div>
+                      <div className="text-xs text-gray-500">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-400 mb-2 block">视频模型</label>
+                <div className="space-y-2">
+                  {videoModels.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setVideoModel(m.id)}
+                      disabled={running}
+                      className={`w-full rounded-lg border p-2.5 text-left transition-all text-sm disabled:opacity-50 ${
+                        videoModel === m.id
+                          ? "border-[#00f5d4] bg-[#00f5d4]/5"
+                          : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                      }`}
+                    >
+                      <div className={`font-medium ${videoModel === m.id ? "text-white" : "text-gray-300"}`}>{m.name}</div>
+                      <div className="text-xs text-gray-500">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {error && (
               <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">

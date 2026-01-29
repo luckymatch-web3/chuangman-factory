@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { novelToScript, scriptToStoryboard } from "@/lib/ai/pipeline";
-import type { PipelineStage } from "@/lib/ai/pipeline";
+import {
+  novelToScript,
+  scriptToStoryboard,
+  designCharacter,
+  generateSceneImage,
+  generateSceneVideo,
+} from "@/lib/ai/pipeline";
+import type { ImageModel, VideoModel, PipelineStage } from "@/lib/ai/pipeline";
+
+export const maxDuration = 300; // 5分钟超时
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -12,22 +20,28 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { text, input_type = "novel" } = body;
-  // input_type: "novel" | "script" | "original"
+  const {
+    text,
+    input_type = "novel",
+    image_model = "seedream",
+    video_model = "kling",
+  } = body;
 
   if (!text?.trim()) {
     return NextResponse.json({ error: "Text is required" }, { status: 400 });
   }
 
-  // 估算积分：文本处理(5) + 角色设计(每个5) + 分镜图(每张3) + 视频(每段10)
+  // 估算积分
   const estimatedScenes = Math.max(3, Math.min(20, Math.ceil(text.length / 200)));
   const estimatedCharacters = Math.max(2, Math.min(6, Math.ceil(estimatedScenes / 3)));
-  const estimatedStoryboards = estimatedScenes * 4; // 平均每场景4个分镜
+  const estimatedStoryboards = estimatedScenes * 5;
+  const imgCost = image_model === "midjourney" ? 8 : 3;
+  const vidCost = video_model === "sora2" ? 20 : 10;
   const estimatedCredits =
-    5 + // 文本处理
-    estimatedCharacters * 5 + // 角色设计
-    estimatedStoryboards * 3 + // 分镜图片
-    estimatedStoryboards * 10; // 视频
+    5 +
+    estimatedCharacters * imgCost +
+    estimatedStoryboards * imgCost +
+    estimatedStoryboards * vidCost;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -43,7 +57,6 @@ export async function POST(req: NextRequest) {
     }, { status: 402 });
   }
 
-  // 创建pipeline记录
   const { data: pipeline, error } = await supabase
     .from("pipeline_runs")
     .insert({
@@ -66,32 +79,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create pipeline" }, { status: 500 });
   }
 
-  // 扣积分
   await supabase.from("profiles").update({ credits: profile.credits - estimatedCredits }).eq("id", user.id);
   await supabase.from("credit_transactions").insert({
     user_id: user.id,
     amount: -estimatedCredits,
     type: "consume",
-    description: `创漫Agent (${estimatedScenes}场景, ${estimatedStoryboards}分镜)`,
+    description: `创漫Agent (${image_model}+${video_model}, ${estimatedScenes}场景)`,
   });
 
-  // 异步执行pipeline（不阻塞响应）
-  executePipeline(pipeline.id, user.id, text, input_type, supabase).catch(console.error);
+  // 异步执行
+  executePipeline(
+    pipeline.id, user.id, text, input_type,
+    image_model as ImageModel, video_model as VideoModel, supabase
+  ).catch(console.error);
 
   return NextResponse.json({
     pipeline_id: pipeline.id,
     estimated_scenes: estimatedScenes,
     estimated_storyboards: estimatedStoryboards,
     credits_cost: estimatedCredits,
+    image_model,
+    video_model,
   });
 }
 
-/** 异步执行完整pipeline */
 async function executePipeline(
   pipelineId: string,
   userId: string,
   text: string,
   inputType: string,
+  imageModel: ImageModel,
+  videoModel: VideoModel,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any
 ) {
@@ -104,37 +122,39 @@ async function executePipeline(
 
     if (run) {
       const steps = JSON.parse(run.steps);
-      // 标记之前步骤为completed
       for (let i = 0; i < stepIndex; i++) steps[i].status = "completed";
       steps[stepIndex].status = status;
       await supabase
         .from("pipeline_runs")
-        .update({ steps: JSON.stringify(steps), current_step: stepIndex, status: stage === "failed" ? "failed" : "processing" })
+        .update({
+          steps: JSON.stringify(steps),
+          current_step: stepIndex,
+          status: stage === "failed" ? "failed" : "processing",
+        })
         .eq("id", pipelineId);
     }
   };
 
   try {
-    // Step 1: 小说/剧本 → 结构化剧本
+    // Step 1: 小说 → 剧本（含详细角色卡）
     await updateStep(0, "novel_to_script", "processing");
     const script = await novelToScript(text);
+    const artStyle = script.art_style || "日漫风格";
 
-    // 保存剧本到assets
     await supabase.from("assets").insert({
       user_id: userId,
       type: "text",
       name: `${script.title} - 剧本`,
-      url: "", // 文本类型存储在metadata
+      url: "",
       metadata: { content: script, pipeline_id: pipelineId },
     });
-
     await updateStep(0, "novel_to_script", "completed");
 
-    // Step 2: 剧本 → 分镜
+    // Step 2: 剧本 → 分镜（两行结构法，角色外貌传入）
     await updateStep(1, "script_to_storyboard", "processing");
     const storyboardScenes = [];
     for (const scene of script.scenes) {
-      const sb = await scriptToStoryboard(scene);
+      const sb = await scriptToStoryboard(scene, script.characters, artStyle);
       storyboardScenes.push(sb);
     }
 
@@ -145,27 +165,66 @@ async function executePipeline(
       url: "",
       metadata: { content: storyboardScenes, pipeline_id: pipelineId },
     });
-
     await updateStep(1, "script_to_storyboard", "completed");
 
-    // Step 3-5: 图片和视频生成（需要真实API Key才能运行）
-    // 先标记为pending，等API Key配置后自动执行
-    await updateStep(2, "character_design", "pending");
+    // Step 3: 角色设计
+    await updateStep(2, "character_design", "processing");
+    const charTasks: Array<{ name: string; taskId: string }> = [];
+    for (const char of script.characters) {
+      try {
+        const taskId = await designCharacter(char, imageModel, artStyle);
+        charTasks.push({ name: char.name, taskId });
+      } catch (err) {
+        console.error(`Character design failed for ${char.name}:`, err);
+      }
+    }
 
-    // 完成文本阶段后更新状态
+    await supabase.from("assets").insert({
+      user_id: userId,
+      type: "text",
+      name: `${script.title} - 角色设计任务`,
+      url: "",
+      metadata: { tasks: charTasks, model: imageModel, pipeline_id: pipelineId },
+    });
+    await updateStep(2, "character_design", charTasks.length > 0 ? "completed" : "failed");
+
+    // Step 4: 场景分镜图
+    await updateStep(3, "scene_generation", "processing");
+    const allStoryboards = storyboardScenes.flatMap((s) => s.storyboards);
+    const sceneTasks: Array<{ id: string; taskId: string }> = [];
+    for (const sb of allStoryboards) {
+      try {
+        const taskId = await generateSceneImage(sb, imageModel, artStyle);
+        sceneTasks.push({ id: sb.id, taskId });
+      } catch (err) {
+        console.error(`Scene image failed for ${sb.id}:`, err);
+      }
+    }
+
+    await supabase.from("assets").insert({
+      user_id: userId,
+      type: "text",
+      name: `${script.title} - 场景图任务`,
+      url: "",
+      metadata: { tasks: sceneTasks, model: imageModel, pipeline_id: pipelineId },
+    });
+    await updateStep(3, "scene_generation", sceneTasks.length > 0 ? "completed" : "failed");
+
+    // Step 5: 视频生成（需要等图片完成拿到URL）
+    // 标记状态，实际需要轮询图片完成后再执行
+    await updateStep(4, "video_generation", "pending");
+
     await supabase
       .from("pipeline_runs")
-      .update({
-        status: "partial",
-        current_step: 2,
-      })
+      .update({ status: "partial", current_step: 4 })
       .eq("id", pipelineId);
 
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error("Pipeline failed:", errorMsg);
     await supabase
       .from("pipeline_runs")
-      .update({ status: "failed", error_message: errorMsg })
+      .update({ status: "failed" })
       .eq("id", pipelineId);
   }
 }
