@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "创漫工厂 - AI动漫创作工厂",
-  description: "AI驱动的动漫创作工厂，支持NanoBanner、Midjourney图片生成，Sora 2视频生成，自动化流水线一键成片",
+  title: "创漫工厂 - 一篇小说，一部动漫",
+  description: "上传小说或剧本，AI自动生成完整动漫视频。创漫Agent一键创作，无需设计经验。",
 };
 
 export default function RootLayout({

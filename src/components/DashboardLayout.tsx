@@ -1,34 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Sparkles,
   LayoutDashboard,
   ImageIcon,
   Video,
   Scissors,
-  Clapperboard,
-  BrainCircuit,
-  Workflow,
+  Bot,
   FolderOpen,
   Settings,
   CreditCard,
   ChevronLeft,
   ChevronRight,
-  LogOut,
   User,
+  LogOut,
+  Plus,
 } from "lucide-react";
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   { href: "/dashboard", label: "工作台", icon: LayoutDashboard },
+  { href: "/pipeline", label: "创漫Agent", icon: Bot },
   { href: "/create/image", label: "图片生成", icon: ImageIcon },
   { href: "/create/video", label: "视频生成", icon: Video },
   { href: "/create/edit", label: "图像编辑", icon: Scissors },
-  { href: "/create/lip-sync", label: "对口型", icon: Clapperboard },
-  { href: "/create/lora", label: "LoRA训练", icon: BrainCircuit },
-  { href: "/pipeline", label: "自动化流水线", icon: Workflow },
   { href: "/assets", label: "素材管理", icon: FolderOpen },
 ];
 
@@ -38,7 +36,14 @@ const bottomItems = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <div className="flex h-screen bg-[#0a0e1a] text-gray-200">
@@ -90,6 +95,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
           <button
+            onClick={handleLogout}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-400 hover:bg-white/5 hover:text-gray-200 transition-colors ${collapsed ? "justify-center" : ""}`}
+            title={collapsed ? "退出登录" : undefined}
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            {!collapsed && <span>退出登录</span>}
+          </button>
+          <button
             onClick={() => setCollapsed(!collapsed)}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-400 hover:bg-white/5 hover:text-gray-200 transition-colors"
           >
@@ -105,16 +118,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="flex h-16 items-center justify-between border-b border-white/5 bg-[#0a0e1a]/80 backdrop-blur-sm px-6">
           <div />
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 rounded-full bg-[#00f5d4]/10 px-4 py-1.5 text-sm">
+            <Link
+              href="/credits"
+              className="flex items-center gap-2 rounded-full bg-[#00f5d4]/10 px-4 py-1.5 text-sm hover:bg-[#00f5d4]/20 transition-colors"
+            >
               <CreditCard className="h-4 w-4 text-[#00f5d4]" />
               <span className="text-[#00f5d4] font-semibold">100</span>
               <span className="text-gray-400">积分</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
+              <Plus className="h-3.5 w-3.5 text-[#00f5d4]" />
+            </Link>
+            <Link href="/settings" className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer hover:text-white transition-colors">
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#00f5d4] to-[#7c3aed] flex items-center justify-center">
                 <User className="h-4 w-4 text-white" />
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 
